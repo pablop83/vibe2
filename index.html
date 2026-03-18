@@ -370,6 +370,7 @@
   const HOVER_LERP   = 0.055; // smoothing speed (lower = lazier float)
   let rawMouseNX  = 0.5, rawMouseNY  = 0.5;  // normalised 0–1
   let sMouseNX    = 0.5, sMouseNY    = 0.5;  // smoothed
+  let hx = 0, hy = 0;   // current hover offset in world px (updated each frame)
 
   document.addEventListener('mousemove', e => {
     rawMouseNX = e.clientX / W;
@@ -442,8 +443,11 @@
     const camX = camera.position.x, camY = camera.position.y;
 
     allItems.forEach(item => {
-      const sx = item.wx - camX + W / 2;
-      const sy = -(item.wy - camY) + H / 2;
+      // Mirror the vertex shader: worldPos.xy += uDrift*(pf-1) + uHover*(pf-1)*25
+      const pf = parallaxFactors[item.localIdx];
+      const d  = pf - 1;
+      const sx = (item.wx + d * (panX + hx * 25)) - camX + W / 2;
+      const sy = -((item.wy + d * (panY + hy * 25)) - camY) + H / 2;
       if (sx < -(IMG_W + 100) || sx > W + IMG_W + 100) return;
       if (sy < -(IMG_H + 40)  || sy > H + 40) return;
 
@@ -499,8 +503,8 @@
     // Smooth mouse toward raw position (lazy float feel)
     sMouseNX += (rawMouseNX - sMouseNX) * HOVER_LERP;
     sMouseNY += (rawMouseNY - sMouseNY) * HOVER_LERP;
-    const hx = (sMouseNX - 0.5) * HOVER_PX;
-    const hy = (sMouseNY - 0.5) * HOVER_PX;
+    hx = (sMouseNX - 0.5) * HOVER_PX;   // module-level, shared with drawLabels
+    hy = (sMouseNY - 0.5) * HOVER_PX;
 
     // Push pan + hover to every material
     groups.forEach(({ mat }) => {
