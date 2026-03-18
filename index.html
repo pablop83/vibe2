@@ -185,13 +185,18 @@
   // ── Shader — texture + per-instance parallax ───────────────────────────
   const VERT = /* glsl */`
     varying vec2 vUv;
-    attribute float aParallax;   /* per-instance speed factor */
-    uniform   vec2  uDrift;      /* total accumulated pan (world px, no teleport) */
+    attribute float aParallax;   /* per-instance speed factor 0.96–1.04 */
+    uniform   vec2  uDrift;      /* total accumulated pan (world px, no teleport reset) */
+    uniform   vec2  uHover;      /* smoothed mouse offset from screen centre (world px) */
     void main() {
       vUv = uv;
       vec4 worldPos = instanceMatrix * vec4(position, 1.0);
-      /* Shift each instance proportionally to how much it deviates from 1.0 */
+      /* Drag parallax: items deviate from 1.0 scroll at different rates */
       worldPos.xy += uDrift * (aParallax - 1.0);
+      /* Hover parallax: map aParallax [0.96,1.04] → hoverScale [-1,+1]
+         so images float toward/away from the cursor even while still */
+      float hoverScale = (aParallax - 1.0) * 25.0;
+      worldPos.xy += uHover * hoverScale;
       gl_Position = projectionMatrix * modelViewMatrix * worldPos;
     }
   `;
@@ -289,6 +294,7 @@
         uniforms: {
           uTexture: { value: textures[texIdx] },
           uDrift:   { value: new THREE.Vector2(0, 0) },
+          uHover:   { value: new THREE.Vector2(0, 0) },
         },
         vertexShader:   VERT,
         fragmentShader: FRAG,
@@ -358,6 +364,17 @@
   // Accumulated pan in world pixels — never resets on teleport,
   // so parallax offsets stay continuous across tile boundaries.
   let panX = 0, panY = 0;
+
+  // Mouse hover tracking — raw updated on mousemove, smoothed in animate loop
+  const HOVER_PX     = 38;    // max world-px offset at screen edge
+  const HOVER_LERP   = 0.055; // smoothing speed (lower = lazier float)
+  let rawMouseNX  = 0.5, rawMouseNY  = 0.5;  // normalised 0–1
+  let sMouseNX    = 0.5, sMouseNY    = 0.5;  // smoothed
+
+  document.addEventListener('mousemove', e => {
+    rawMouseNX = e.clientX / W;
+    rawMouseNY = e.clientY / H;
+  });
 
   function teleport() {
     // Keep camera inside the middle tile (handles any magnitude of drift)
@@ -479,8 +496,17 @@
       });
     }
 
-    // Push accumulated pan to every material so per-instance parallax applies
-    groups.forEach(({ mat }) => mat.uniforms.uDrift.value.set(panX, panY));
+    // Smooth mouse toward raw position (lazy float feel)
+    sMouseNX += (rawMouseNX - sMouseNX) * HOVER_LERP;
+    sMouseNY += (rawMouseNY - sMouseNY) * HOVER_LERP;
+    const hx = (sMouseNX - 0.5) * HOVER_PX;
+    const hy = (sMouseNY - 0.5) * HOVER_PX;
+
+    // Push pan + hover to every material
+    groups.forEach(({ mat }) => {
+      mat.uniforms.uDrift.value.set(panX, panY);
+      mat.uniforms.uHover.value.set(hx, hy);
+    });
 
     renderer.render(scene, camera);
     drawLabels(now);
