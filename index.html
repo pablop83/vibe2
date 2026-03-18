@@ -161,8 +161,11 @@
     uniform   vec2  uDrift;       /* total accumulated pan */
     uniform   vec2  uHover;       /* smoothed mouse offset from screen centre */
     uniform   float uGlobalScale; /* drag scale: lerps 1→0.9 on mousedown */
+    /* Remap UVs: geometry is (IMG+2*BLEED)×(IMG+2*BLEED), but we want
+       [0,1] to cover only the inner IMG×IMG portrait. Outside → bleed area. */
+    const float BLEED_SCALE = (174.0 + 28.0) / 174.0; /* (IMG + 2*BLEED) / IMG */
     void main() {
-      vUv      = uv;
+      vUv      = (uv - 0.5) * BLEED_SCALE + 0.5;
       vOpacity = aOpacity;
       /* Scale geometry around its own centre: instanceMatrix encodes position+zoomScale */
       vec4 worldPos = instanceMatrix * vec4(position * aHoverScale * uGlobalScale, 1.0);
@@ -199,7 +202,13 @@
         col += texture2D(uTexture, vUv + vec2( o.x,  o.y));
         col /= 9.0;
       }
-      gl_FragColor = vec4(col.rgb, col.a * vOpacity);
+      /* Bleed area: vUv outside [0,1]. Fade alpha by distance so the overflow
+         is invisible when sharp and reveals the blurred edge as blur grows. */
+      vec2 outUv      = max(vec2(0.0), -vUv) + max(vec2(0.0), vUv - 1.0);
+      float bleedPx   = max(outUv.x, outUv.y) * 300.0; /* UV → pixels */
+      float bleedAlpha = (bleedPx < 0.001) ? 1.0
+                       : max(0.0, 1.0 - bleedPx / (blurAmt + 0.001));
+      gl_FragColor = vec4(col.rgb, col.a * bleedAlpha * vOpacity);
     }
   `;
 
@@ -262,7 +271,10 @@
   }))).then(buildScene);
 
   // ── InstancedMesh groups (30 draw calls instead of 1773) ──────────────────
-  const BASE_GEO = new THREE.PlaneGeometry(IMG_W, IMG_H);
+  // Geometry is larger than the image by BLEED_PX on each side so the blur
+  // can overflow the image boundary. UVs are remapped in the vertex shader.
+  const BLEED_PX  = 14;   // must be ≥ max blur radius (10px)
+  const BASE_GEO  = new THREE.PlaneGeometry(IMG_W + BLEED_PX * 2, IMG_H + BLEED_PX * 2);
   const dummy    = new THREE.Object3D();
 
   // Zoom animation state per item
