@@ -180,8 +180,8 @@
     varying vec2 vUv;
     varying float vOpacity;
     void main() {
-      /* Blur scales with how much opacity has dropped (0 = sharp, max ~3px) */
-      float blurAmt = (1.0 - vOpacity) * 3.5;
+      /* Blur scales with how much opacity has dropped (0 = sharp, max 10px) */
+      float blurAmt = (1.0 - vOpacity) * 10.0;
       const float T = 1.0 / 300.0;  /* texel size — images are 300×300 */
       vec2 o = vec2(T * blurAmt);
       vec4 col;
