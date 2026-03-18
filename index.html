@@ -471,6 +471,23 @@
   document.addEventListener('touchmove', e => dragMove(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
   document.addEventListener('touchend', dragEnd);
 
+  // ── Scroll / trackpad pan ──────────────────────────────────────────────────
+  // deltaMode 0 = px (trackpad), 1 = lines (~40px), 2 = pages
+  document.addEventListener('wheel', e => {
+    e.preventDefault();
+    const m  = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
+    const dx = e.deltaX * m;
+    const dy = e.deltaY * m;
+    // Scroll right/down = viewport moves right/down = content goes left/up
+    camera.position.x += dx;
+    camera.position.y -= dy;
+    panX -= dx;   // parallax tracking (mirrors camera movement)
+    panY -= dy;
+    teleport();
+    // Clear hover when canvas moves under the cursor
+    if (hoveredGlobalIdx !== -1) { hoveredGlobalIdx = -1; hoverDragActive = true; }
+  }, { passive: false });
+
   // ── Label draw (Canvas 2D) — O(visible items) per frame ───────────────────
   let fontReady = false;
   document.fonts.ready.then(() => { fontReady = true; });
