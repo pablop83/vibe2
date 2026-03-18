@@ -76,38 +76,7 @@
   import * as THREE from 'three';
 
   // ── Assets ─────────────────────────────────────────────────────────────────
-  const IMGS = [
-    'https://www.figma.com/api/mcp/asset/4e169aea-a43e-49d2-a1f2-c62a166655e8',
-    'https://www.figma.com/api/mcp/asset/b2b87118-dd36-4078-a657-f5478fb07bee',
-    'https://www.figma.com/api/mcp/asset/baca64df-8d53-422f-920e-86c9fa3a29ad',
-    'https://www.figma.com/api/mcp/asset/b1a690ac-1788-4dc7-b109-d1abaef5f4ae',
-    'https://www.figma.com/api/mcp/asset/951f06cd-f0e0-47ed-ad68-a1924b54f5d4',
-    'https://www.figma.com/api/mcp/asset/ab36102c-7720-4854-8c06-d9f5d7383527',
-    'https://www.figma.com/api/mcp/asset/2ab87b18-63db-4c49-88b5-594e1e91d62e',
-    'https://www.figma.com/api/mcp/asset/5f68ed9a-1bca-49d9-8f52-25417de9213a',
-    'https://www.figma.com/api/mcp/asset/4eb09831-6500-456b-a7f0-6cec9e4e245d',
-    'https://www.figma.com/api/mcp/asset/19df77e6-5fdf-4996-8148-535663501e4f',
-    'https://www.figma.com/api/mcp/asset/046e9c7e-964d-45df-b625-b48ba27cdc9e',
-    'https://www.figma.com/api/mcp/asset/50eb7ada-3835-4d0b-bd38-22ff9184b838',
-    'https://www.figma.com/api/mcp/asset/4fa9c4b6-9d5c-4b9f-b156-6033a5f94fcb',
-    'https://www.figma.com/api/mcp/asset/ddba799c-38c9-472c-95e2-87e2f253c302',
-    'https://www.figma.com/api/mcp/asset/de9ed42d-a875-4658-bd46-b964c948dbfa',
-    'https://www.figma.com/api/mcp/asset/6f1fbfba-8731-4ee4-b75c-26509dcac7b9',
-    'https://www.figma.com/api/mcp/asset/ff88ee4d-5745-4586-a958-8db7f064dcd3',
-    'https://www.figma.com/api/mcp/asset/57aacb5d-f6c2-407e-b75e-0d88f17214fb',
-    'https://www.figma.com/api/mcp/asset/7d1e040c-ff58-4fb7-ad36-dc3522810595',
-    'https://www.figma.com/api/mcp/asset/0e026b73-7426-4a4c-b9c1-de76cd60d0ca',
-    'https://www.figma.com/api/mcp/asset/f06991c8-ae25-4a50-8bb3-300760bbd54d',
-    'https://www.figma.com/api/mcp/asset/34fe5d5f-129b-407d-9716-b3cfffa016e6',
-    'https://www.figma.com/api/mcp/asset/7d622abf-5295-4cad-b191-67314c098503',
-    'https://www.figma.com/api/mcp/asset/48a69058-0059-4ddb-bb65-25b8c7ac24b0',
-    'https://www.figma.com/api/mcp/asset/e9cb1401-bfb2-4186-97d7-ca064db9ef47',
-    'https://www.figma.com/api/mcp/asset/dca67740-ac59-448b-96bc-3e8c9c24e0c2',
-    'https://www.figma.com/api/mcp/asset/3c08c27a-1d54-4528-a7c3-d14b309bf292',
-    'https://www.figma.com/api/mcp/asset/35d15082-44bd-42a6-846c-180c5476def1',
-    'https://www.figma.com/api/mcp/asset/69779b6d-9b5a-4107-9e4e-a3abe79dd1d1',
-    'https://www.figma.com/api/mcp/asset/36546739-7567-4617-91ff-3cf765bc444e',
-  ];
+  const IMGS = Array.from({ length: 30 }, (_, i) => `img/${i}.png`);
 
   const NAMES = [
     'Aída','Jorge','Ary','Modesto','Ary Héctor','El Pata',
