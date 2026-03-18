@@ -180,7 +180,25 @@
     varying vec2 vUv;
     varying float vOpacity;
     void main() {
-      vec4 col = texture2D(uTexture, vUv);
+      /* Blur scales with how much opacity has dropped (0 = sharp, max ~3px) */
+      float blurAmt = (1.0 - vOpacity) * 3.5;
+      const float T = 1.0 / 300.0;  /* texel size — images are 300×300 */
+      vec2 o = vec2(T * blurAmt);
+      vec4 col;
+      if (blurAmt < 0.01) {
+        col = texture2D(uTexture, vUv);
+      } else {
+        col  = texture2D(uTexture, vUv + vec2(-o.x, -o.y));
+        col += texture2D(uTexture, vUv + vec2( 0.0, -o.y));
+        col += texture2D(uTexture, vUv + vec2( o.x, -o.y));
+        col += texture2D(uTexture, vUv + vec2(-o.x,  0.0));
+        col += texture2D(uTexture, vUv);
+        col += texture2D(uTexture, vUv + vec2( o.x,  0.0));
+        col += texture2D(uTexture, vUv + vec2(-o.x,  o.y));
+        col += texture2D(uTexture, vUv + vec2( 0.0,  o.y));
+        col += texture2D(uTexture, vUv + vec2( o.x,  o.y));
+        col /= 9.0;
+      }
       gl_FragColor = vec4(col.rgb, col.a * vOpacity);
     }
   `;
@@ -343,6 +361,7 @@
   const N_ITEMS         = allItems.length;
   const iHoverScale     = new Float32Array(N_ITEMS).fill(1.0); // current per-item scale mult
   const iOpacity        = new Float32Array(N_ITEMS).fill(1.0); // current per-item opacity
+  const iLabelAlpha     = new Float32Array(N_ITEMS).fill(1.0); // current per-item label alpha
   let   hoveredGlobalIdx = -1;   // which item the cursor is over (-1 = none)
   let   hoverDragActive  = false; // true while any hover/drag animation is in progress
   let   globalDragScale  = 1.0;  // lerps 1 ↔ 0.9 on mousedown/up
@@ -451,11 +470,12 @@
     if (labelsAlpha <= 0 || !fontReady) return;
 
     lCtx.save();
-    lCtx.globalAlpha = labelsAlpha;
-    lCtx.font = '10px "DM Mono", "Courier New", monospace';
     const camX = camera.position.x, camY = camera.position.y;
 
-    allItems.forEach(item => {
+    allItems.forEach((item, gi) => {
+      const la = labelsAlpha * iLabelAlpha[gi];
+      if (la <= 0.005) return;
+
       // Mirror the vertex shader: worldPos.xy += uDrift*(pf-1) + uHover*(pf-1)*25
       const pf = parallaxFactors[item.localIdx];
       const d  = pf - 1;
@@ -464,13 +484,23 @@
       if (sx < -(IMG_W + 100) || sx > W + IMG_W + 100) return;
       if (sy < -(IMG_H + 40)  || sy > H + 40) return;
 
-      const labelY = sy - IMG_H / 2 - 6;
+      // Scale text with the image (accounts for both hover-scale and drag-scale)
+      const sc      = iHoverScale[gi] * globalDragScale;
+      const halfW   = IMG_W / 2 * sc;
+      const halfH   = IMG_H / 2 * sc;
+      const fontSize = Math.round(10 * sc);
+      const labelY  = sy - halfH - 6;
+
+      lCtx.save();
+      lCtx.globalAlpha = la;
+      lCtx.font = `${fontSize}px "DM Mono", "Courier New", monospace`;
       lCtx.fillStyle = 'rgba(8,8,8,0.45)';
       lCtx.textAlign = 'left';
-      lCtx.fillText(`${item.id}.`, sx - IMG_W / 2, labelY);
+      lCtx.fillText(`${item.id}.`, sx - halfW, labelY);
       lCtx.fillStyle = '#080808';
       lCtx.textAlign = 'right';
-      lCtx.fillText(item.name, sx + IMG_W / 2, labelY);
+      lCtx.fillText(item.name, sx + halfW, labelY);
+      lCtx.restore();
     });
 
     lCtx.restore();
@@ -532,13 +562,18 @@
           const tScale = isHovered ? 1.1 : anyHovered ? 0.8 : 1.0;
           const tOpac  = (!isHovered && anyHovered) ? 0.3 : 1.0;
 
+          // label: visible only for hovered item; fade out on drag or when another is hovered
+          const tLabel = dragging ? 0.0 : (anyHovered && !isHovered) ? 0.0 : 1.0;
+
           iHoverScale[gi] += (tScale - iHoverScale[gi]) * ILERPF;
           iOpacity[gi]    += (tOpac  - iOpacity[gi])    * ILERPF;
+          iLabelAlpha[gi] += (tLabel - iLabelAlpha[gi]) * ILERPF;
           hoverScaleBuf[ii] = iHoverScale[gi];
           opacityBuf[ii]    = iOpacity[gi];
 
           if (Math.abs(iHoverScale[gi] - tScale) > 0.001 ||
-              Math.abs(iOpacity[gi]    - tOpac)  > 0.001) stillMoving = true;
+              Math.abs(iOpacity[gi]    - tOpac)  > 0.001 ||
+              Math.abs(iLabelAlpha[gi] - tLabel) > 0.001) stillMoving = true;
         });
         mat.uniforms.uGlobalScale.value = globalDragScale;
         geo.getAttribute('aHoverScale').needsUpdate = true;
