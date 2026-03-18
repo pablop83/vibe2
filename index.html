@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>197 Historias Ilustradas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #fafafa; }
+    body { cursor: grab; user-select: none; -webkit-user-select: none; }
+    body.grabbing { cursor: grabbing; }
+
+    nav {
+      position: fixed; inset: 0 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 24px 16px;
+      font-family: 'DM Mono', 'Courier New', monospace;
+      font-size: 13px; letter-spacing: -0.39px; text-transform: uppercase;
+      z-index: 100; pointer-events: none; color: #080808;
+    }
+    nav span { pointer-events: auto; cursor: default; }
+    .nav-views { display: flex; gap: 24px; }
+
+    #preloader {
+      position: fixed; inset: 0; background: #fafafa;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; transition: opacity 0.6s ease;
+    }
+    #preloader.hidden { opacity: 0; pointer-events: none; }
+    #preloader-text {
+      font-family: 'DM Mono', 'Courier New', monospace;
+      font-size: 13px; letter-spacing: -0.39px; color: rgba(8,8,8,0.4);
+    }
+
+    /* WebGL canvas fades in via CSS when experience starts */
+    #glcanvas {
+      position: fixed; inset: 0; z-index: 0;
+      opacity: 0; transition: opacity 0.8s ease;
+    }
+    #glcanvas.visible { opacity: 1; }
+
+    /* 2D label canvas */
+    #labelcanvas {
+      position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <span>197 Historias Ilustradas</span>
+    <div class="nav-views">
+      <span>[ Grilla ]</span>
+      <span>[ Listado ]</span>
+      <span>Galeria</span>
+    </div>
+    <span>Sobre el proyecto</span>
+  </nav>
+
+  <div id="preloader"><span id="preloader-text">0 / 30</span></div>
+
+  <canvas id="labelcanvas"></canvas>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+
+  // ── Assets ─────────────────────────────────────────────────────────────────
+  const IMGS = [
+    'https://www.figma.com/api/mcp/asset/4e169aea-a43e-49d2-a1f2-c62a166655e8',
+    'https://www.figma.com/api/mcp/asset/b2b87118-dd36-4078-a657-f5478fb07bee',
+    'https://www.figma.com/api/mcp/asset/baca64df-8d53-422f-920e-86c9fa3a29ad',
+    'https://www.figma.com/api/mcp/asset/b1a690ac-1788-4dc7-b109-d1abaef5f4ae',
+    'https://www.figma.com/api/mcp/asset/951f06cd-f0e0-47ed-ad68-a1924b54f5d4',
+    'https://www.figma.com/api/mcp/asset/ab36102c-7720-4854-8c06-d9f5d7383527',
+    'https://www.figma.com/api/mcp/asset/2ab87b18-63db-4c49-88b5-594e1e91d62e',
+    'https://www.figma.com/api/mcp/asset/5f68ed9a-1bca-49d9-8f52-25417de9213a',
+    'https://www.figma.com/api/mcp/asset/4eb09831-6500-456b-a7f0-6cec9e4e245d',
+    'https://www.figma.com/api/mcp/asset/19df77e6-5fdf-4996-8148-535663501e4f',
+    'https://www.figma.com/api/mcp/asset/046e9c7e-964d-45df-b625-b48ba27cdc9e',
+    'https://www.figma.com/api/mcp/asset/50eb7ada-3835-4d0b-bd38-22ff9184b838',
+    'https://www.figma.com/api/mcp/asset/4fa9c4b6-9d5c-4b9f-b156-6033a5f94fcb',
+    'https://www.figma.com/api/mcp/asset/ddba799c-38c9-472c-95e2-87e2f253c302',
+    'https://www.figma.com/api/mcp/asset/de9ed42d-a875-4658-bd46-b964c948dbfa',
+    'https://www.figma.com/api/mcp/asset/6f1fbfba-8731-4ee4-b75c-26509dcac7b9',
+    'https://www.figma.com/api/mcp/asset/ff88ee4d-5745-4586-a958-8db7f064dcd3',
+    'https://www.figma.com/api/mcp/asset/57aacb5d-f6c2-407e-b75e-0d88f17214fb',
+    'https://www.figma.com/api/mcp/asset/7d1e040c-ff58-4fb7-ad36-dc3522810595',
+    'https://www.figma.com/api/mcp/asset/0e026b73-7426-4a4c-b9c1-de76cd60d0ca',
+    'https://www.figma.com/api/mcp/asset/f06991c8-ae25-4a50-8bb3-300760bbd54d',
+    'https://www.figma.com/api/mcp/asset/34fe5d5f-129b-407d-9716-b3cfffa016e6',
+    'https://www.figma.com/api/mcp/asset/7d622abf-5295-4cad-b191-67314c098503',
+    'https://www.figma.com/api/mcp/asset/48a69058-0059-4ddb-bb65-25b8c7ac24b0',
+    'https://www.figma.com/api/mcp/asset/e9cb1401-bfb2-4186-97d7-ca064db9ef47',
+    'https://www.figma.com/api/mcp/asset/dca67740-ac59-448b-96bc-3e8c9c24e0c2',
+    'https://www.figma.com/api/mcp/asset/3c08c27a-1d54-4528-a7c3-d14b309bf292',
+    'https://www.figma.com/api/mcp/asset/35d15082-44bd-42a6-846c-180c5476def1',
+    'https://www.figma.com/api/mcp/asset/69779b6d-9b5a-4107-9e4e-a3abe79dd1d1',
+    'https://www.figma.com/api/mcp/asset/36546739-7567-4617-91ff-3cf765bc444e',
+  ];
+
+  const NAMES = [
+    'Aída','Jorge','Ary','Modesto','Ary Héctor','El Pata',
+    'María Emilia','Miguel Ángel','Pablo Horacio','Beatriz',
+    'Luján Alcides','Graciela','Rosa','Carlos','Ana','Juan',
+    'Luis','Marta','Roberto','Elena','Felipe','Inés',
+    'Ricardo','Sofía','Manuel','Clara','Ernesto','Pilar',
+    'Alejandro','Natalia','Fernando','Lucía','Diego',
+    'María José','Ramón','Carmen','Antonio','Dolores',
+    'Sebastián','Andrea','Gonzalo','Isabel','Valentín',
+    'Mercedes','Rodrigo','Julia','Tomás','Olga',
+    'Alfredo','Silvia','Hernán','Claudia','Gustavo',
+    'Norma','Marcelo','Liliana','Gerardo','Susana',
+    'Alberto','Patricia','Víctor','Laura','Oscar',
+  ];
+
+  // ── Layout constants ───────────────────────────────────────────────────────
+  const IMG_W = 174, IMG_H = 174;
+  const COLS = 8, COL_W = 310, ROW_H = 300, V_STAGGER = 76;
+  const PAD_L   = (COL_W - IMG_W) / 2;
+  const PAD_TOP = (ROW_H - V_STAGGER - IMG_H) / 2;
+  const ROWS    = Math.ceil(197 / COLS);
+  const TILE_W  = COLS * COL_W;   // 2480
+  const TILE_H  = ROWS * ROW_H;   // 7500
+
+  // ── Renderer & Camera ──────────────────────────────────────────────────────
+  const DPR = Math.min(devicePixelRatio, 1.5);
+  let W = innerWidth, H = innerHeight;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xfafafa);
+
+  const camera = new THREE.OrthographicCamera(-W/2, W/2, H/2, -H/2, 0.1, 100);
+  camera.position.set(TILE_W * 1.5, -TILE_H * 1.5, 10);
+
+  // Attach renderer to pre-created canvas element so we can control its CSS class
+  const glCanvas = document.getElementById('glcanvas') || document.createElement('canvas');
+  glCanvas.id = 'glcanvas';
+  if (!document.getElementById('glcanvas')) document.body.insertBefore(glCanvas, document.querySelector('nav'));
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas: glCanvas,
+    antialias: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(W, H);
+
+  // 2D label overlay
+  const labelCanvas = document.getElementById('labelcanvas');
+  labelCanvas.width  = W;
+  labelCanvas.height = H;
+  const lCtx = labelCanvas.getContext('2d');
+
+  window.addEventListener('resize', () => {
+    W = innerWidth; H = innerHeight;
+    camera.left = -W/2; camera.right = W/2;
+    camera.top  =  H/2; camera.bottom = -H/2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+    labelCanvas.width  = W;
+    labelCanvas.height = H;
+    labelCanvas.style.width  = W + 'px';
+    labelCanvas.style.height = H + 'px';
+  });
+
+  // ── Simple shader — no per-instance opacity, just texture ─────────────────
+  // Opacity is handled at the canvas-element level via CSS transition.
+  // Scale animation (small→full) uses instanceMatrix only — proven to work.
+  const VERT = /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const FRAG = /* glsl */`
+    precision mediump float;
+    uniform sampler2D uTexture;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = texture2D(uTexture, vUv);
+    }
+  `;
+
+  // ── Build world-position item list (1773 = 197 × 9 tiles) ─────────────────
+  function buildTileItems() {
+    const out = [];
+    let n = 0, row = 0;
+    while (n < 197) {
+      const count = Math.min(COLS, 197 - n);
+      const evenHigh = row % 2 === 0;
+      for (let c = 0; c < count; c++) {
+        const x    = PAD_L + c * COL_W;
+        const high = evenHigh ? c % 2 === 0 : c % 2 !== 0;
+        const y    = PAD_TOP + row * ROW_H + (high ? 0 : V_STAGGER);
+        out.push({ id: n + 1, name: NAMES[n % NAMES.length], imgIdx: n % IMGS.length, localIdx: n, x, y });
+        n++;
+      }
+      row++;
+    }
+    return out;
+  }
+
+  const tileItems = buildTileItems();
+  const allItems  = [];
+
+  for (let cy = 0; cy < 3; cy++) {
+    for (let cx = 0; cx < 3; cx++) {
+      tileItems.forEach(item => {
+        allItems.push({
+          ...item,
+          wx: item.x + IMG_W / 2 + cx * TILE_W,
+          wy: -(item.y + IMG_H / 2 + cy * TILE_H),
+        });
+      });
+    }
+  }
+
+  // ── Preload textures ───────────────────────────────────────────────────────
+  const preloaderEl   = document.getElementById('preloader');
+  const preloaderText = document.getElementById('preloader-text');
+  const textures      = new Array(IMGS.length).fill(null);
+  let   loadedCount   = 0;
+
+  const texLoader = new THREE.TextureLoader();
+  preloaderText.textContent = `0 / ${IMGS.length}`;
+
+  Promise.all(IMGS.map((url, i) => new Promise(resolve => {
+    texLoader.load(url, tex => {
+      tex.colorSpace      = THREE.SRGBColorSpace;
+      tex.minFilter       = THREE.LinearFilter;   // no mipmaps — avoids non-POT issues
+      tex.magFilter       = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      textures[i]                  = tex;
+      preloaderText.textContent    = `${++loadedCount} / ${IMGS.length}`;
+      resolve();
+    }, undefined, () => {
+      preloaderText.textContent    = `${++loadedCount} / ${IMGS.length}`;
+      resolve();
+    });
+  }))).then(buildScene);
+
+  // ── InstancedMesh groups (30 draw calls instead of 1773) ──────────────────
+  const BASE_GEO = new THREE.PlaneGeometry(IMG_W, IMG_H);
+  const dummy    = new THREE.Object3D();
+
+  // Zoom animation state per item
+  const N         = allItems.length;
+  const zoomStart = new Float64Array(N).fill(Infinity);
+  let   zoomingCount = 0;
+
+  const groups = [];     // { mesh, globalIdxArray }
+  const itemToGroup = new Array(N);
+
+  let labelsShowTime = 0;
+  let labelsAlpha    = 0;
+
+  function buildScene() {
+    const buckets = Array.from({ length: IMGS.length }, () => []);
+    allItems.forEach((item, gi) => buckets[item.imgIdx].push(gi));
+
+    buckets.forEach((globalIdxArray, texIdx) => {
+      if (!globalIdxArray.length) return;
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms:       { uTexture: { value: textures[texIdx] } },
+        vertexShader:   VERT,
+        fragmentShader: FRAG,
+        side:           THREE.FrontSide,
+        depthWrite:     false,
+        depthTest:      false,
+      });
+
+      const mesh = new THREE.InstancedMesh(BASE_GEO, mat, globalIdxArray.length);
+      mesh.frustumCulled = false;
+
+      // All instances start small (0.23) — will zoom to 1 after 2s
+      globalIdxArray.forEach((globalIdx, ii) => {
+        const item = allItems[globalIdx];
+        dummy.position.set(item.wx, item.wy, 0);
+        dummy.scale.setScalar(0.23);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(ii, dummy.matrix);
+        itemToGroup[globalIdx] = { gi: groups.length, ii };
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+
+      scene.add(mesh);
+      groups.push({ mesh, globalIdxArray });
+    });
+
+    startExperience();
+  }
+
+  // ── Animation ──────────────────────────────────────────────────────────────
+  const ZOOM_DUR = 900;
+  function cubicOut(t) { return 1 - (1 - t) ** 3; }
+
+  function startExperience() {
+    // Fade out preloader
+    preloaderEl.classList.add('hidden');
+    setTimeout(() => preloaderEl.remove(), 700);
+
+    // CSS fade-in of the WebGL canvas (replaces per-instance opacity stagger)
+    glCanvas.classList.add('visible');
+
+    // Zoom after 2 s — staggered per item
+    setTimeout(() => {
+      const t0 = performance.now();
+      allItems.forEach((item, i) => {
+        zoomStart[i] = t0 + Math.min(item.localIdx, 196) * 7;
+        zoomingCount++;
+      });
+      labelsShowTime = t0 + 196 * 7 + ZOOM_DUR + 150;
+    }, 2000);
+  }
+
+  // ── Inertia pan ────────────────────────────────────────────────────────────
+  let dragging = false, vx = 0, vy = 0, prevX = 0, prevY = 0;
+  let rafInertia = null;
+  const FRICTION = 0.87, STOP_V = 0.15;
+
+  function teleport() {
+    // Keep camera inside the middle tile (handles any magnitude of drift)
+    camera.position.x = ((camera.position.x - TILE_W) % TILE_W + TILE_W) % TILE_W + TILE_W;
+    camera.position.y = -(((-camera.position.y - TILE_H) % TILE_H + TILE_H) % TILE_H + TILE_H);
+  }
+
+  function inertiaLoop() {
+    vx *= FRICTION; vy *= FRICTION;
+    camera.position.x -= vx;
+    camera.position.y += vy;
+    teleport();
+    if (Math.abs(vx) > STOP_V || Math.abs(vy) > STOP_V) rafInertia = requestAnimationFrame(inertiaLoop);
+    else rafInertia = null;
+  }
+
+  function dragStart(cx, cy) {
+    if (rafInertia) { cancelAnimationFrame(rafInertia); rafInertia = null; }
+    dragging = true; vx = vy = 0;
+    prevX = cx; prevY = cy;
+    document.body.classList.add('grabbing');
+  }
+  function dragMove(cx, cy) {
+    if (!dragging) return;
+    const dx = cx - prevX, dy = cy - prevY;
+    vx = dx; vy = dy; prevX = cx; prevY = cy;
+    camera.position.x -= dx;
+    camera.position.y += dy;
+    teleport();
+  }
+  function dragEnd() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('grabbing');
+    if (Math.abs(vx) > STOP_V || Math.abs(vy) > STOP_V) rafInertia = requestAnimationFrame(inertiaLoop);
+  }
+
+  document.addEventListener('mousedown',  e => { if (!e.target.closest('nav')) dragStart(e.clientX, e.clientY); });
+  document.addEventListener('mousemove',  e => dragMove(e.clientX, e.clientY));
+  document.addEventListener('mouseup',    dragEnd);
+  document.addEventListener('mouseleave', dragEnd);
+  document.addEventListener('touchstart', e => {
+    if (e.target.closest('nav')) return;
+    e.preventDefault();
+    dragStart(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+  document.addEventListener('touchmove', e => dragMove(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+  document.addEventListener('touchend', dragEnd);
+
+  // ── Label draw (Canvas 2D) — O(visible items) per frame ───────────────────
+  let fontReady = false;
+  document.fonts.ready.then(() => { fontReady = true; });
+
+  function drawLabels(now) {
+    lCtx.clearRect(0, 0, W, H);
+    if (labelsShowTime === 0) return;
+    labelsAlpha = Math.min((now - labelsShowTime) / 500, 1);
+    if (labelsAlpha <= 0 || !fontReady) return;
+
+    lCtx.save();
+    lCtx.globalAlpha = labelsAlpha;
+    lCtx.font = '10px "DM Mono", "Courier New", monospace';
+    const camX = camera.position.x, camY = camera.position.y;
+
+    allItems.forEach(item => {
+      const sx = item.wx - camX + W / 2;
+      const sy = -(item.wy - camY) + H / 2;
+      if (sx < -(IMG_W + 100) || sx > W + IMG_W + 100) return;
+      if (sy < -(IMG_H + 40)  || sy > H + 40) return;
+
+      const labelY = sy - IMG_H / 2 - 6;
+      lCtx.fillStyle = 'rgba(8,8,8,0.45)';
+      lCtx.textAlign = 'left';
+      lCtx.fillText(`${item.id}.`, sx - IMG_W / 2, labelY);
+      lCtx.fillStyle = '#080808';
+      lCtx.textAlign = 'right';
+      lCtx.fillText(item.name, sx + IMG_W / 2, labelY);
+    });
+
+    lCtx.restore();
+  }
+
+  // ── Render loop ────────────────────────────────────────────────────────────
+  // Only updates instance matrices while zoom animation is running.
+  // Once zoomingCount === 0, the animate loop becomes pure camera + render — very cheap.
+  function animate() {
+    requestAnimationFrame(animate);
+    const now = performance.now();
+
+    if (zoomingCount > 0) {
+      groups.forEach(group => {
+        let needMatrix = false;
+
+        group.globalIdxArray.forEach((globalIdx, ii) => {
+          const zs = zoomStart[globalIdx];
+          if (zs === Infinity) return;
+
+          const elapsed = now - zs;
+          if (elapsed < 0) return;
+
+          const t = Math.min(elapsed / ZOOM_DUR, 1);
+          const s = 0.23 + 0.77 * cubicOut(t);
+          const item = allItems[globalIdx];
+          dummy.position.set(item.wx, item.wy, 0);
+          dummy.scale.setScalar(s);
+          dummy.updateMatrix();
+          group.mesh.setMatrixAt(ii, dummy.matrix);
+          needMatrix = true;
+
+          if (t >= 1) {
+            zoomStart[globalIdx] = Infinity;
+            zoomingCount = Math.max(0, zoomingCount - 1);
+          }
+        });
+
+        if (needMatrix) group.mesh.instanceMatrix.needsUpdate = true;
+      });
+    }
+
+    renderer.render(scene, camera);
+    drawLabels(now);
+  }
+
+  animate();
+  </script>
+</body>
+</html>
