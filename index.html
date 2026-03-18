@@ -185,18 +185,22 @@
   // ── Shader — texture + per-instance parallax ───────────────────────────
   const VERT = /* glsl */`
     varying vec2 vUv;
-    attribute float aParallax;   /* per-instance speed factor 0.96–1.04 */
-    uniform   vec2  uDrift;      /* total accumulated pan (world px, no teleport reset) */
-    uniform   vec2  uHover;      /* smoothed mouse offset from screen centre (world px) */
+    varying float vOpacity;
+    attribute float aParallax;    /* per-instance parallax speed 0.96–1.04 */
+    attribute float aHoverScale;  /* per-instance scale multiplier (hover/idle) */
+    attribute float aOpacity;     /* per-instance opacity (hover/drag fade) */
+    uniform   vec2  uDrift;       /* total accumulated pan */
+    uniform   vec2  uHover;       /* smoothed mouse offset from screen centre */
+    uniform   float uGlobalScale; /* drag scale: lerps 1→0.9 on mousedown */
     void main() {
-      vUv = uv;
-      vec4 worldPos = instanceMatrix * vec4(position, 1.0);
-      /* Drag parallax: items deviate from 1.0 scroll at different rates */
+      vUv      = uv;
+      vOpacity = aOpacity;
+      /* Scale geometry around its own centre: instanceMatrix encodes position+zoomScale */
+      vec4 worldPos = instanceMatrix * vec4(position * aHoverScale * uGlobalScale, 1.0);
+      /* Drag parallax */
       worldPos.xy += uDrift * (aParallax - 1.0);
-      /* Hover parallax: map aParallax [0.96,1.04] → hoverScale [-1,+1]
-         so images float toward/away from the cursor even while still */
-      float hoverScale = (aParallax - 1.0) * 25.0;
-      worldPos.xy += uHover * hoverScale;
+      /* Hover parallax float */
+      worldPos.xy += uHover * ((aParallax - 1.0) * 25.0);
       gl_Position = projectionMatrix * modelViewMatrix * worldPos;
     }
   `;
@@ -205,8 +209,10 @@
     precision mediump float;
     uniform sampler2D uTexture;
     varying vec2 vUv;
+    varying float vOpacity;
     void main() {
-      gl_FragColor = texture2D(uTexture, vUv);
+      vec4 col = texture2D(uTexture, vUv);
+      gl_FragColor = vec4(col.rgb, col.a * vOpacity);
     }
   `;
 
@@ -292,25 +298,28 @@
 
       const mat = new THREE.ShaderMaterial({
         uniforms: {
-          uTexture: { value: textures[texIdx] },
-          uDrift:   { value: new THREE.Vector2(0, 0) },
-          uHover:   { value: new THREE.Vector2(0, 0) },
+          uTexture:     { value: textures[texIdx] },
+          uDrift:       { value: new THREE.Vector2(0, 0) },
+          uHover:       { value: new THREE.Vector2(0, 0) },
+          uGlobalScale: { value: 1.0 },
         },
         vertexShader:   VERT,
         fragmentShader: FRAG,
+        transparent:    true,
         side:           THREE.FrontSide,
         depthWrite:     false,
         depthTest:      false,
       });
 
-      const geo  = BASE_GEO.clone();   // own geo so aParallax buffer is independent
+      const geo  = BASE_GEO.clone();
       const mesh = new THREE.InstancedMesh(geo, mat, globalIdxArray.length);
       mesh.frustumCulled = false;
 
-      // Per-instance parallax buffer (one float per instance)
-      const pBuf = new Float32Array(globalIdxArray.length);
+      const count        = globalIdxArray.length;
+      const pBuf         = new Float32Array(count);   // aParallax
+      const hoverScaleBuf= new Float32Array(count).fill(1.0);  // aHoverScale
+      const opacityBuf   = new Float32Array(count).fill(1.0);  // aOpacity
 
-      // All instances start small (0.23) — will zoom to 1 after 2s
       globalIdxArray.forEach((globalIdx, ii) => {
         const item = allItems[globalIdx];
         dummy.position.set(item.wx, item.wy, 0);
@@ -318,16 +327,16 @@
         dummy.updateMatrix();
         mesh.setMatrixAt(ii, dummy.matrix);
         itemToGroup[globalIdx] = { gi: groups.length, ii };
-        pBuf[ii] = parallaxFactors[item.localIdx];   // same portrait → same factor
+        pBuf[ii] = parallaxFactors[item.localIdx];
       });
       mesh.instanceMatrix.needsUpdate = true;
 
-      // Attach as instanced attribute (divisor=1 means one value per instance)
-      geo.setAttribute('aParallax',
-        new THREE.InstancedBufferAttribute(pBuf, 1));
+      geo.setAttribute('aParallax',   new THREE.InstancedBufferAttribute(pBuf, 1));
+      geo.setAttribute('aHoverScale', new THREE.InstancedBufferAttribute(hoverScaleBuf, 1));
+      geo.setAttribute('aOpacity',    new THREE.InstancedBufferAttribute(opacityBuf, 1));
 
       scene.add(mesh);
-      groups.push({ mesh, mat, globalIdxArray });
+      groups.push({ mesh, mat, geo, globalIdxArray, hoverScaleBuf, opacityBuf });
     });
 
     startExperience();
@@ -361,6 +370,15 @@
   let rafInertia = null;
   const FRICTION = 0.87, STOP_V = 0.15;
 
+  // ── Hover / drag interaction state ────────────────────────────────────────
+  const N_ITEMS         = allItems.length;
+  const iHoverScale     = new Float32Array(N_ITEMS).fill(1.0); // current per-item scale mult
+  const iOpacity        = new Float32Array(N_ITEMS).fill(1.0); // current per-item opacity
+  let   hoveredGlobalIdx = -1;   // which item the cursor is over (-1 = none)
+  let   hoverDragActive  = false; // true while any hover/drag animation is in progress
+  let   globalDragScale  = 1.0;  // lerps 1 ↔ 0.9 on mousedown/up
+  const ILERPF           = 0.12; // lerp speed for scale/opacity
+
   // Accumulated pan in world pixels — never resets on teleport,
   // so parallax offsets stay continuous across tile boundaries.
   let panX = 0, panY = 0;
@@ -375,6 +393,26 @@
   document.addEventListener('mousemove', e => {
     rawMouseNX = e.clientX / W;
     rawMouseNY = e.clientY / H;
+    if (dragging) return;
+    // Hit-test in world space (mirroring the shader's parallax formula)
+    const mwx = camera.position.x + (e.clientX - W / 2);
+    const mwy = camera.position.y - (e.clientY - H / 2);
+    let found = -1;
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i];
+      const d    = parallaxFactors[item.localIdx] - 1;
+      const awx  = item.wx + d * (panX + hx * 25);
+      const awy  = item.wy + d * (panY + hy * 25);
+      if (Math.abs(mwx - awx) <= IMG_W / 2 && Math.abs(mwy - awy) <= IMG_H / 2) {
+        // Quick viewport cull so off-screen tile copies don't steal the hit
+        const sx = awx - camera.position.x + W / 2;
+        const sy = -(awy - camera.position.y) + H / 2;
+        if (sx > -IMG_W && sx < W + IMG_W && sy > -IMG_H && sy < H + IMG_H) {
+          found = i; break;
+        }
+      }
+    }
+    if (found !== hoveredGlobalIdx) { hoveredGlobalIdx = found; hoverDragActive = true; }
   });
 
   function teleport() {
@@ -398,6 +436,8 @@
     dragging = true; vx = vy = 0;
     prevX = cx; prevY = cy;
     document.body.classList.add('grabbing');
+    hoveredGlobalIdx = -1;   // no hover while dragging
+    hoverDragActive  = true;
   }
   function dragMove(cx, cy) {
     if (!dragging) return;
@@ -413,12 +453,16 @@
     dragging = false;
     document.body.classList.remove('grabbing');
     if (Math.abs(vx) > STOP_V || Math.abs(vy) > STOP_V) rafInertia = requestAnimationFrame(inertiaLoop);
+    hoverDragActive = true;  // restore scale when released
   }
 
   document.addEventListener('mousedown',  e => { if (!e.target.closest('nav')) dragStart(e.clientX, e.clientY); });
   document.addEventListener('mousemove',  e => dragMove(e.clientX, e.clientY));
   document.addEventListener('mouseup',    dragEnd);
-  document.addEventListener('mouseleave', dragEnd);
+  document.addEventListener('mouseleave', () => {
+    if (hoveredGlobalIdx !== -1) { hoveredGlobalIdx = -1; hoverDragActive = true; }
+    dragEnd();
+  });
   document.addEventListener('touchstart', e => {
     if (e.target.closest('nav')) return;
     e.preventDefault();
@@ -506,7 +550,36 @@
     hx = (sMouseNX - 0.5) * HOVER_PX;   // module-level, shared with drawLabels
     hy = (sMouseNY - 0.5) * HOVER_PX;
 
-    // Push pan + hover to every material
+    // ── Hover / drag scale+opacity animation ────────────────────────────────
+    if (hoverDragActive) {
+      const tDragScale = dragging ? 0.9 : 1.0;
+      globalDragScale += (tDragScale - globalDragScale) * ILERPF;
+      let stillMoving = Math.abs(globalDragScale - tDragScale) > 0.001;
+
+      groups.forEach(({ mat, geo, globalIdxArray, hoverScaleBuf, opacityBuf }) => {
+        globalIdxArray.forEach((gi, ii) => {
+          const isHovered  = gi === hoveredGlobalIdx;
+          const anyHovered = hoveredGlobalIdx !== -1 && !dragging;
+          const tScale = isHovered ? 1.1 : anyHovered ? 0.8 : 1.0;
+          const tOpac  = (!isHovered && anyHovered) ? 0.3 : 1.0;
+
+          iHoverScale[gi] += (tScale - iHoverScale[gi]) * ILERPF;
+          iOpacity[gi]    += (tOpac  - iOpacity[gi])    * ILERPF;
+          hoverScaleBuf[ii] = iHoverScale[gi];
+          opacityBuf[ii]    = iOpacity[gi];
+
+          if (Math.abs(iHoverScale[gi] - tScale) > 0.001 ||
+              Math.abs(iOpacity[gi]    - tOpac)  > 0.001) stillMoving = true;
+        });
+        mat.uniforms.uGlobalScale.value = globalDragScale;
+        geo.getAttribute('aHoverScale').needsUpdate = true;
+        geo.getAttribute('aOpacity').needsUpdate    = true;
+      });
+
+      if (!stillMoving) hoverDragActive = false;
+    }
+
+    // Push pan + hover parallax uniforms to every material
     groups.forEach(({ mat }) => {
       mat.uniforms.uDrift.value.set(panX, panY);
       mat.uniforms.uHover.value.set(hx, hy);
