@@ -174,14 +174,25 @@
     labelCanvas.style.height = H + 'px';
   });
 
-  // ── Simple shader — no per-instance opacity, just texture ─────────────────
-  // Opacity is handled at the canvas-element level via CSS transition.
-  // Scale animation (small→full) uses instanceMatrix only — proven to work.
+  // ── Per-portrait parallax factors (seeded, consistent across reloads) ────
+  // Range 0.96–1.04: items at 1.04 scroll 4% faster (foreground feel),
+  // items at 0.96 scroll 4% slower (background feel).
+  const parallaxFactors = Float32Array.from({ length: 197 }, (_, i) => {
+    const r = Math.abs(Math.sin(i * 127.1 + 311.7) * 43758.5453123);
+    return 0.96 + (r - Math.floor(r)) * 0.08;   // 0.96 … 1.04
+  });
+
+  // ── Shader — texture + per-instance parallax ───────────────────────────
   const VERT = /* glsl */`
     varying vec2 vUv;
+    attribute float aParallax;   /* per-instance speed factor */
+    uniform   vec2  uDrift;      /* total accumulated pan (world px, no teleport) */
     void main() {
       vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+      vec4 worldPos = instanceMatrix * vec4(position, 1.0);
+      /* Shift each instance proportionally to how much it deviates from 1.0 */
+      worldPos.xy += uDrift * (aParallax - 1.0);
+      gl_Position = projectionMatrix * modelViewMatrix * worldPos;
     }
   `;
 
@@ -275,7 +286,10 @@
       if (!globalIdxArray.length) return;
 
       const mat = new THREE.ShaderMaterial({
-        uniforms:       { uTexture: { value: textures[texIdx] } },
+        uniforms: {
+          uTexture: { value: textures[texIdx] },
+          uDrift:   { value: new THREE.Vector2(0, 0) },
+        },
         vertexShader:   VERT,
         fragmentShader: FRAG,
         side:           THREE.FrontSide,
@@ -283,8 +297,12 @@
         depthTest:      false,
       });
 
-      const mesh = new THREE.InstancedMesh(BASE_GEO, mat, globalIdxArray.length);
+      const geo  = BASE_GEO.clone();   // own geo so aParallax buffer is independent
+      const mesh = new THREE.InstancedMesh(geo, mat, globalIdxArray.length);
       mesh.frustumCulled = false;
+
+      // Per-instance parallax buffer (one float per instance)
+      const pBuf = new Float32Array(globalIdxArray.length);
 
       // All instances start small (0.23) — will zoom to 1 after 2s
       globalIdxArray.forEach((globalIdx, ii) => {
@@ -294,11 +312,16 @@
         dummy.updateMatrix();
         mesh.setMatrixAt(ii, dummy.matrix);
         itemToGroup[globalIdx] = { gi: groups.length, ii };
+        pBuf[ii] = parallaxFactors[item.localIdx];   // same portrait → same factor
       });
       mesh.instanceMatrix.needsUpdate = true;
 
+      // Attach as instanced attribute (divisor=1 means one value per instance)
+      geo.setAttribute('aParallax',
+        new THREE.InstancedBufferAttribute(pBuf, 1));
+
       scene.add(mesh);
-      groups.push({ mesh, globalIdxArray });
+      groups.push({ mesh, mat, globalIdxArray });
     });
 
     startExperience();
@@ -332,6 +355,10 @@
   let rafInertia = null;
   const FRICTION = 0.87, STOP_V = 0.15;
 
+  // Accumulated pan in world pixels — never resets on teleport,
+  // so parallax offsets stay continuous across tile boundaries.
+  let panX = 0, panY = 0;
+
   function teleport() {
     // Keep camera inside the middle tile (handles any magnitude of drift)
     camera.position.x = ((camera.position.x - TILE_W) % TILE_W + TILE_W) % TILE_W + TILE_W;
@@ -342,6 +369,7 @@
     vx *= FRICTION; vy *= FRICTION;
     camera.position.x -= vx;
     camera.position.y += vy;
+    panX += vx; panY += vy;   // mirror camera drift for parallax
     teleport();
     if (Math.abs(vx) > STOP_V || Math.abs(vy) > STOP_V) rafInertia = requestAnimationFrame(inertiaLoop);
     else rafInertia = null;
@@ -359,6 +387,7 @@
     vx = dx; vy = dy; prevX = cx; prevY = cy;
     camera.position.x -= dx;
     camera.position.y += dy;
+    panX += dx; panY += dy;   // mirror camera drift for parallax
     teleport();
   }
   function dragEnd() {
@@ -449,6 +478,9 @@
         if (needMatrix) group.mesh.instanceMatrix.needsUpdate = true;
       });
     }
+
+    // Push accumulated pan to every material so per-instance parallax applies
+    groups.forEach(({ mat }) => mat.uniforms.uDrift.value.set(panX, panY));
 
     renderer.render(scene, camera);
     drawLabels(now);
