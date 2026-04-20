@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designers AI Tools Chart</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "react":             "https://esm.sh/react@18.3.1",
+      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+      "react-dom/client":  "https://esm.sh/react-dom@18.3.1/client",
+      "recharts":          "https://esm.sh/recharts@2.13.3"
+    }
+  }
+  </script>
+  <style>
+    @font-face { font-family:'BeausiteClassic'; src:url('./fonts/BeausiteClassicRegular.ttf') format('truetype'); font-weight:400; }
+    @font-face { font-family:'BeausiteClassic'; src:url('./fonts/BeausiteClassicMedium.ttf')  format('truetype'); font-weight:500; }
+    @font-face { font-family:'BeausiteClassic'; src:url('./fonts/BeausiteClassicSemibold.ttf') format('truetype'); font-weight:600; }
+    @font-face { font-family:'BeausiteClassic'; src:url('./fonts/BeausiteClassicBold.ttf')    format('truetype'); font-weight:700; }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #d8dde3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'BeausiteClassic', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      padding: 40px 0;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 268px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.14);
+      font-family: 'BeausiteClassic', system-ui, sans-serif;
+      font-size: 13px;
+      color: #111;
+      overflow: hidden;
+      z-index: 100;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid #eee;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .panel-header svg { opacity: 0.4; transition: opacity 0.15s; }
+    .panel-header:hover svg { opacity: 0.7; }
+    .panel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; max-height: 80vh; overflow-y: auto; }
+    .panel-section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #888; margin-bottom: 6px; }
+
+    .ctrl-row { display: flex; align-items: center; gap: 8px; }
+    .ctrl-label { flex: 1; font-size: 12.5px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* toggle */
+    .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0; border-radius: 10px;
+      background: #ddd; transition: background 0.2s; cursor: pointer;
+    }
+    .toggle input:checked + .toggle-track { background: #111; }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff; transition: transform 0.2s; pointer-events: none;
+    }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+    /* range slider */
+    input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; background: #e0e0e0;
+      outline: none; flex: 1; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: #111; cursor: pointer;
+    }
+    .range-val {
+      font-size: 12px; font-weight: 500; color: #555;
+      min-width: 28px; text-align: right; flex-shrink: 0;
+    }
+
+    /* color swatch */
+    .swatch-btn {
+      width: 22px; height: 22px; border-radius: 5px;
+      border: 1.5px solid rgba(0,0,0,0.12); cursor: pointer;
+      flex-shrink: 0; overflow: hidden; position: relative;
+    }
+    .swatch-btn input[type=color] {
+      position: absolute; inset: -4px; opacity: 0;
+      width: calc(100% + 8px); height: calc(100% + 8px);
+      cursor: pointer; border: none; padding: 0;
+    }
+
+    /* text input */
+    .text-input {
+      width: 100%; border: 1px solid #e0e0e0; border-radius: 6px;
+      padding: 5px 8px; font-size: 12.5px; font-family: inherit;
+      color: #111; outline: none; transition: border-color 0.15s;
+    }
+    .text-input:focus { border-color: #aaa; }
+
+    /* number input */
+    .num-input {
+      width: 44px; border: 1px solid #e0e0e0; border-radius: 6px;
+      padding: 3px 6px; font-size: 12.5px; font-family: inherit;
+      color: #111; text-align: center; outline: none;
+    }
+    .num-input:focus { border-color: #aaa; }
+
+    /* row item */
+    .data-row { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid #f0f0f0; }
+    .data-row:first-child { border-top: none; padding-top: 0; }
+    .data-row-top { display: flex; align-items: center; gap: 7px; }
+    .data-row-slider { display: flex; align-items: center; gap: 7px; padding-left: 29px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import { createElement as h, Fragment, useState, useEffect, useRef } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { BarChart, Bar, XAxis, YAxis, Cell, LabelList, Customized } from 'recharts';
+
+    /* ── Layout ── */
+    const CARD   = 637;
+    const PAD    = 16;
+    const W      = 605;
+    const BAR_H  = 91;
+    const ROW_PY = 8;
+    const ROW_H  = BAR_H + ROW_PY * 2;
+    const LBL_W  = 171;
+    const R_MAR  = 185;
+    const FONT   = 'BeausiteClassic,sans-serif';
+
+    const INIT_DATA = [
+      { name: 'Company-funded\n(individual choice)', value: 30, color: '#7ba2ad' },
+      { name: 'Company-provided\n(standardized)',    value: 26, color: '#fe7141' },
+      { name: 'Personal accounts\n(out of pocket)',  value: 24, color: '#cdabfe' },
+      { name: 'Unsanctioned\npersonal use',           value: 12, color: '#000000' },
+      { name: 'Internally built\n(mandated)',         value: 8,  color: '#3292ff' },
+    ];
+
+    /* ── Count-up hook ──
+       - Toggling active on  → counts from 0 to target
+       - Changing target while active → eases from last displayed value  */
+    function useCountUp(target, duration, active) {
+      const [displayed, setDisplayed] = useState(target);
+      const rafRef       = useRef(null);
+      const fromRef      = useRef(target);   // start value for next animation
+      const wasActiveRef = useRef(false);    // always false on first mount
+
+      useEffect(() => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+        if (!active) {
+          wasActiveRef.current = false;
+          fromRef.current = target;
+          setDisplayed(target);
+          return;
+        }
+
+        // First activation → count from 0; subsequent target changes → ease from current
+        const from = wasActiveRef.current ? fromRef.current : 0;
+        wasActiveRef.current = true;
+
+        const t0 = performance.now();
+        function tick(now) {
+          const t     = Math.min((now - t0) / duration, 1);
+          const eased = 1 - Math.pow(1 - t, 3);
+          const val   = Math.round(from + (target - from) * eased);
+          setDisplayed(val);
+          if (t < 1) rafRef.current = requestAnimationFrame(tick);
+          else        fromRef.current = target;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(rafRef.current);
+      }, [target, duration, active]);
+
+      return displayed;
+    }
+
+    /* ── Chart sub-components ── */
+    function YTick({ x, y, payload }) {
+      const lines = payload.value.split('\n');
+      const lh = 18;
+      const topY = -(ROW_H / 2) + 8;
+      return h('g', { transform: `translate(${x},${y})` },
+        lines.map((line, i) =>
+          h('text', { key: i, x: -(LBL_W - 8), y: topY + i * lh,
+            dominantBaseline: 'hanging', textAnchor: 'start',
+            fill: '#000', fontSize: 16, fontWeight: 500,
+            fontFamily: FONT, letterSpacing: -0.48 }, line)
+        )
+      );
+    }
+
+    /* Individual animated label — needs to be its own component for hook */
+    function AnimatedPct({ value, y, animated, animDuration }) {
+      const count = useCountUp(value ?? 0, animDuration, animated);
+      return h('text', { x: W, y: y - ROW_PY + 8,
+        dominantBaseline: 'hanging', textAnchor: 'end',
+        fill: '#000', fontSize: 64, fontWeight: 400,
+        fontFamily: FONT, letterSpacing: -3.2 }, count + '%');
+    }
+
+    /* Rendered via Customized so it's always visible (not hidden by bar animation) */
+    function PctLabels({ formattedGraphicalItems, animated, animDuration }) {
+      const items = formattedGraphicalItems?.[0]?.props?.data;
+      if (!items?.length) return null;
+      return h('g', null,
+        items.map((item, i) =>
+          h(AnimatedPct, { key: i, value: item.value, y: item.y, animated, animDuration })
+        )
+      );
+    }
+
+    function BarShape({ x, y, width, fill }) {
+      return h('rect', { x, y: y - ROW_PY, width, height: ROW_H, fill });
+    }
+
+    /* Renders on top of bars via Customized (last paint layer in Recharts) */
+    function Dividers({ formattedGraphicalItems }) {
+      const items = formattedGraphicalItems?.[0]?.props?.data;
+      if (!items?.length) return null;
+      return h('g', null,
+        items.flatMap((item, i) => {
+          const lx = item.x - LBL_W;
+          const lineY = item.y - ROW_PY;
+          return [
+            h('rect', { key: `t${i}`, x: lx, y: lineY, width: W, height: 1, fill: 'rgba(0,0,0,0.2)' }),
+            i === items.length - 1
+              ? h('rect', { key: `b${i}`, x: lx, y: lineY + ROW_H, width: W, height: 1, fill: 'rgba(0,0,0,0.2)' })
+              : null,
+          ].filter(Boolean);
+        })
+      );
+    }
+
+    /* ── Chart card ── */
+    function Chart({ data, title, animated, animDuration }) {
+      const maxVal = Math.max(...data.map(d => d.value));
+      const domain = [0, Math.max(60, Math.ceil(maxVal / 10) * 10)];
+
+      return h('div', {
+        style: { background: '#f5f9fc', padding: PAD, width: CARD,
+                 display: 'flex', flexDirection: 'column', gap: 25 }
+      },
+        h('div', { style: { paddingBottom: 16 } },
+          h('h2', { style: { fontSize: 24, fontWeight: 500, fontFamily: FONT,
+              color: '#000', letterSpacing: -0.96, lineHeight: 1.2, margin: 0 } }, title)
+        ),
+        h(BarChart, {
+          layout: 'vertical', width: W, height: data.length * ROW_H + 2, data,
+          margin: { top: 0, right: R_MAR, bottom: 0, left: 0 },
+          barSize: BAR_H, barCategoryGap: ROW_PY * 2,
+        },
+          h(XAxis, { type: 'number', hide: true, domain }),
+          h(YAxis, { type: 'category', dataKey: 'name', width: LBL_W,
+            tick: h(YTick), axisLine: false, tickLine: false }),
+          h(Bar, {
+            dataKey: 'value',
+            isAnimationActive: animated,
+            animationDuration: animDuration,
+            shape: h(BarShape),
+          },
+            data.map((entry, i) => h(Cell, { key: i, fill: entry.color })),
+          ),
+          h(Customized, { component: Dividers }),
+          h(Customized, { component: (props) => h(PctLabels, { ...props, animated, animDuration }) })
+        ),
+        h('p', { style: { fontSize: 14, fontWeight: 500, fontFamily: FONT,
+            color: 'rgba(0,0,0,0.6)', letterSpacing: -0.14, lineHeight: 1.2 } },
+          'Source: Designer Fund survey of 958 designers, Q1 2026')
+      );
+    }
+
+    /* ── Floating panel ── */
+    function Toggle({ checked, onChange }) {
+      return h('label', { className: 'toggle' },
+        h('input', { type: 'checkbox', checked, onChange: e => onChange(e.target.checked) }),
+        h('span', { className: 'toggle-track' }),
+        h('span', { className: 'toggle-thumb' })
+      );
+    }
+
+    function ColorSwatch({ color, onChange }) {
+      return h('label', { className: 'swatch-btn', style: { background: color }, title: color },
+        h('input', { type: 'color', value: color, onInput: e => onChange(e.target.value) })
+      );
+    }
+
+    function Panel({ data, title, setTitle, animated, setAnimated, animDuration, setAnimDuration, updateRow, open, setOpen }) {
+      return h('div', { className: 'panel' },
+        /* Header */
+        h('div', { className: 'panel-header', onClick: () => setOpen(o => !o) },
+          h('span', null, '⚙ Chart Settings'),
+          h('svg', { width: 14, height: 14, viewBox: '0 0 14 14', fill: 'none' },
+            h('path', { d: open ? 'M2 9l5-5 5 5' : 'M2 5l5 5 5-5',
+              stroke: '#000', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' })
+          )
+        ),
+
+        open && h('div', { className: 'panel-body' },
+
+          /* General */
+          h('div', null,
+            h('div', { className: 'panel-section-label' }, 'General'),
+            h('div', { className: 'ctrl-row', style: { marginBottom: 8 } },
+              h('span', { className: 'ctrl-label' }, 'Title'),
+            ),
+            h('input', { className: 'text-input', value: title,
+              onChange: e => setTitle(e.target.value) }),
+          ),
+
+          /* Animation */
+          h('div', null,
+            h('div', { className: 'panel-section-label' }, 'Animation'),
+            h('div', { className: 'ctrl-row', style: { marginBottom: animated ? 8 : 0 } },
+              h('span', { className: 'ctrl-label' }, 'Enable'),
+              h(Toggle, { checked: animated, onChange: setAnimated }),
+            ),
+            animated && h('div', { className: 'ctrl-row' },
+              h('span', { className: 'ctrl-label' }, 'Duration'),
+              h('input', { type: 'range', min: 200, max: 2000, step: 100,
+                value: animDuration, onChange: e => setAnimDuration(+e.target.value) }),
+              h('span', { className: 'range-val' }, animDuration + 'ms'),
+            ),
+          ),
+
+          /* Data rows */
+          h('div', null,
+            h('div', { className: 'panel-section-label' }, 'Data'),
+            data.map((row, i) =>
+              h('div', { key: i, className: 'data-row' },
+                h('div', { className: 'data-row-top' },
+                  h(ColorSwatch, { color: row.color, onChange: c => updateRow(i, 'color', c) }),
+                  h('span', { className: 'ctrl-label', title: row.name.replace('\n', ' ') },
+                    row.name.split('\n')[0]),
+                  h('input', { className: 'num-input', type: 'number', min: 0, max: 100,
+                    value: row.value,
+                    onChange: e => updateRow(i, 'value', Math.min(100, Math.max(0, +e.target.value))) }),
+                  h('span', { style: { fontSize: 12, color: '#aaa', flexShrink: 0 } }, '%'),
+                ),
+                h('div', { className: 'data-row-slider' },
+                  h('input', { type: 'range', min: 0, max: 100,
+                    value: row.value,
+                    onChange: e => updateRow(i, 'value', +e.target.value) }),
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    /* ── App root ── */
+    function App() {
+      const [data, setData]           = useState(INIT_DATA);
+      const [title, setTitle]         = useState("How designers' AI tools are paid for");
+      const [animated, setAnimated]   = useState(true);
+      const [animDuration, setAnimDuration] = useState(600);
+      const [open, setOpen]           = useState(true);
+
+      function updateRow(i, key, val) {
+        setData(d => d.map((row, j) => j === i ? { ...row, [key]: val } : row));
+      }
+
+      return h(Fragment, null,
+        h(Chart, { data, title, animated, animDuration }),
+        h(Panel, { data, title, setTitle, animated, setAnimated,
+                   animDuration, setAnimDuration, updateRow, open, setOpen })
+      );
+    }
+
+    createRoot(document.getElementById('root')).render(h(App));
+  </script>
+</body>
+</html>
